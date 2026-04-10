@@ -80,7 +80,7 @@
 | `count_diff`    | BIGINT       | Расхождение                           |
 | `threshold`     | BIGINT       | Порог срабатывания                    |
 | `alert_message` | TEXT         | Текст сообщения об аларме             |
-| `created_at`    | TIMESTAMPTZ  | Время создания алармa                 |
+| `created_at`    | TIMESTAMPTZ  | Время создания аларма                 |
 
 ### Функции
 

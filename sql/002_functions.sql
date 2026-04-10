@@ -86,17 +86,10 @@ DECLARE
     v_finished_at   TIMESTAMPTZ;
     v_db_name       TEXT;
     v_log_row       dba.replication_log;
-
-    -- Запрос COUNT на продовой базе через dblink
-    v_remote_exact_sql      TEXT;
-    v_remote_approx_sql     TEXT;
-    -- Запрос COUNT на реплике локально
-    v_local_exact_sql       TEXT;
-    v_local_approx_sql      TEXT;
+    -- Динамические SQL-строки для локальных и удалённых запросов
+    v_remote_sql    TEXT;
+    v_local_sql     TEXT;
 BEGIN
-    -- Фиксируем время начала всей проверки
-    v_started_at := NOW();
-
     -- Определяем имя базы из строки подключения (для записи в лог)
     -- Ищем 'dbname=<value>' в строке подключения
     v_db_name := trim(
@@ -113,6 +106,9 @@ BEGIN
         v_count_replica := NULL;
         v_count_diff    := NULL;
 
+        -- Фиксируем время начала обработки конкретной таблицы
+        v_started_at := NOW();
+
         BEGIN
             IF p_use_approximate THEN
                 -- ----------------------------------------------------------------
@@ -121,17 +117,17 @@ BEGIN
                 -- ----------------------------------------------------------------
 
                 -- Запрос на реплике (локально)
-                v_local_approx_sql := format(
+                v_local_sql := format(
                     'SELECT reltuples::bigint FROM pg_class '
                     'WHERE relname = %L AND relnamespace = '
                     '(SELECT oid FROM pg_namespace WHERE nspname = %L)',
                     v_table.table_name,
                     v_table.schema_name
                 );
-                EXECUTE v_local_approx_sql INTO v_count_replica;
+                EXECUTE v_local_sql INTO v_count_replica;
 
                 -- Запрос на prod через dblink
-                v_remote_approx_sql := format(
+                v_remote_sql := format(
                     'SELECT reltuples::bigint FROM pg_class '
                     'WHERE relname = %L AND relnamespace = '
                     '(SELECT oid FROM pg_namespace WHERE nspname = %L)',
@@ -141,7 +137,7 @@ BEGIN
                 SELECT r.cnt INTO v_count_prod
                 FROM dblink(
                     p_prod_connstr,
-                    v_remote_approx_sql
+                    v_remote_sql
                 ) AS r(cnt bigint);
 
             ELSE
@@ -150,15 +146,15 @@ BEGIN
                 -- ----------------------------------------------------------------
 
                 -- Запрос на реплике (локально)
-                v_local_exact_sql := format(
+                v_local_sql := format(
                     'SELECT COUNT(*) FROM %I.%I',
                     v_table.schema_name,
                     v_table.table_name
                 );
-                EXECUTE v_local_exact_sql INTO v_count_replica;
+                EXECUTE v_local_sql INTO v_count_replica;
 
                 -- Запрос на prod через dblink
-                v_remote_exact_sql := format(
+                v_remote_sql := format(
                     'SELECT COUNT(*) FROM %I.%I',
                     v_table.schema_name,
                     v_table.table_name
@@ -166,7 +162,7 @@ BEGIN
                 SELECT r.cnt INTO v_count_prod
                 FROM dblink(
                     p_prod_connstr,
-                    v_remote_exact_sql
+                    v_remote_sql
                 ) AS r(cnt bigint);
             END IF;
 
